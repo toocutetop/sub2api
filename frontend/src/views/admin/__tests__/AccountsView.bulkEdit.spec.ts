@@ -9,14 +9,23 @@ const {
   getBatchTodayStats,
   getAllProxies,
   getAllGroups,
-  probeUpstreamBillingBatch
+  probeUpstreamBillingBatch,
+  routeQuery,
+  routerReplace
 } = vi.hoisted(() => ({
   listAccounts: vi.fn(),
   listWithEtag: vi.fn(),
   getBatchTodayStats: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
-  probeUpstreamBillingBatch: vi.fn()
+  probeUpstreamBillingBatch: vi.fn(),
+  routeQuery: {} as Record<string, string>,
+  routerReplace: vi.fn()
+}))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: routeQuery }),
+  useRouter: () => ({ replace: routerReplace })
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -51,7 +60,8 @@ vi.mock('@/stores/app', () => ({
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
-    token: 'test-token'
+    token: 'test-token',
+    isSimpleMode: true
   })
 }))
 
@@ -89,6 +99,16 @@ const AccountBulkActionsBarStub = {
   `
 }
 
+const AccountTableFiltersStub = {
+  emits: ['update:filters', 'change'],
+  template: `
+    <button
+      data-test="filter-group"
+      @click="$emit('update:filters', { group: '7' }); $emit('change')"
+    >filter group</button>
+  `
+}
+
 const PaginationStub = {
   emits: ['update:page'],
   template: '<button data-test="next-page" @click="$emit(\'update:page\', 2)">next</button>'
@@ -109,6 +129,8 @@ describe('admin AccountsView bulk edit scope', () => {
     getAllProxies.mockReset()
     getAllGroups.mockReset()
     probeUpstreamBillingBatch.mockReset()
+    routerReplace.mockReset()
+    for (const key of Object.keys(routeQuery)) delete routeQuery[key]
 
     listAccounts.mockResolvedValue({
       items: [],
@@ -126,6 +148,87 @@ describe('admin AccountsView bulk edit scope', () => {
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
     probeUpstreamBillingBatch.mockResolvedValue([])
+  })
+
+  it('loads accounts from a group deep link', async () => {
+    routeQuery.group = '42'
+
+    mount(AccountsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /></div>' },
+          DataTable: DataTableStub,
+          AccountTableActions: true,
+          AccountTableFilters: true,
+          AccountBulkActionsBar: true,
+          AccountActionMenu: true,
+          ImportDataModal: true,
+          ReAuthAccountModal: true,
+          AccountTestModal: true,
+          AccountStatsModal: true,
+          ScheduledTestsPanel: true,
+          SyncFromCrsModal: true,
+          TempUnschedStatusModal: true,
+          ErrorPassthroughRulesModal: true,
+          TLSFingerprintProfilesModal: true,
+          CreateAccountModal: true,
+          EditAccountModal: true,
+          BulkEditAccountModal: true,
+          PlatformTypeBadge: true,
+          AccountCapacityCell: true,
+          AccountStatusIndicator: true,
+          AccountTodayStatsCell: true,
+          AccountGroupsCell: true,
+          AccountUsageCell: true,
+          ConfirmDialog: true,
+          Icon: true
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(listAccounts).toHaveBeenCalledWith(
+      1,
+      expect.any(Number),
+      expect.objectContaining({ group: '42' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+  })
+
+  it('keeps the selected group in the URL query', async () => {
+    routeQuery.tab = 'accounts'
+
+    const wrapper = mount(AccountsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: { template: '<div><slot name="filters" /></div>' },
+          AccountTableActions: true,
+          AccountTableFilters: AccountTableFiltersStub,
+          ImportDataModal: true,
+          ReAuthAccountModal: true,
+          AccountTestModal: true,
+          AccountStatsModal: true,
+          ScheduledTestsPanel: true,
+          SyncFromCrsModal: true,
+          TempUnschedStatusModal: true,
+          ErrorPassthroughRulesModal: true,
+          TLSFingerprintProfilesModal: true,
+          CreateAccountModal: true,
+          EditAccountModal: true,
+          BulkEditAccountModal: true,
+          ConfirmDialog: true,
+          Icon: true
+        }
+      }
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="filter-group"]').trigger('click')
+
+    expect(routerReplace).toHaveBeenCalledWith({
+      query: { tab: 'accounts', group: '7' }
+    })
   })
 
   it('opens bulk edit in filtered-results mode from the bulk actions dropdown', async () => {
@@ -235,6 +338,7 @@ describe('admin AccountsView bulk edit scope', () => {
 
     const columnKeys = wrapper.findAll('[data-test="column-key"]').map(node => node.text())
     expect(columnKeys).toContain('created_at')
+    expect(columnKeys).toContain('groups')
     const columns = wrapper.getComponent(DataTableStub).props('columns') as Array<{ key: string; label: string; sortable: boolean }>
     expect(columns.find(column => column.key === 'created_at')).toMatchObject({
       label: 'admin.accounts.columns.createdAt',

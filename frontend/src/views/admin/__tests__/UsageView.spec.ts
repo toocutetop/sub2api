@@ -92,8 +92,9 @@ vi.mock('vue-router', () => ({
 const AppLayoutStub = { template: '<div><slot /></div>' }
 const UsageFiltersStub = { template: '<div><slot name="after-reset" /></div>' }
 const UsageTableStub = {
+  props: ['columns'],
   emits: ['userClick'],
-  template: '<div data-test="usage-table"><button class="user-click" @click="$emit(\'userClick\', 2)">user</button></div>',
+  template: '<div data-test="usage-table"><span v-for="column in columns" :key="column.key" data-test="usage-column">{{ column.key }}</span><button class="user-click" @click="$emit(\'userClick\', 2)">user</button></div>',
 }
 const UserTokenRankingStub = {
   emits: ['select-user'],
@@ -123,6 +124,9 @@ const GroupDistributionChartStub = {
 describe('admin UsageView distribution metric toggles', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)
+    vi.mocked(localStorage.setItem).mockReset()
+    vi.mocked(localStorage.removeItem).mockReset()
     list.mockReset()
     getStats.mockReset()
     getSnapshotV2.mockReset()
@@ -154,6 +158,55 @@ describe('admin UsageView distribution metric toggles', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('shows reasoning effort by default', async () => {
+    const wrapper = mount(UsageView, {
+      global: { stubs: {
+        AppLayout: AppLayoutStub, UsageStatsCards: true, UsageFilters: UsageFiltersStub,
+        UsageTable: UsageTableStub, UsageExportProgress: true, UsageCleanupDialog: true,
+        UserBalanceHistoryModal: true, AuditLogModal: true, Pagination: true, Select: true,
+        DateRangePicker: true, Icon: true, TokenUsageTrend: true,
+        ModelDistributionChart: true, GroupDistributionChart: true,
+        EndpointDistributionChart: true, UserTokenRanking: true,
+      } },
+    })
+    vi.advanceTimersByTime(120)
+    await flushPromises()
+
+    const columns = wrapper.findAll('[data-test="usage-column"]').map(node => node.text())
+    expect(columns).toContain('reasoning_effort')
+  })
+
+  it('reveals reasoning effort once for legacy saved columns', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === 'usage-hidden-columns' ? JSON.stringify(['reasoning_effort', 'user_agent']) : null
+    )
+
+    const wrapper = mount(UsageView, {
+      global: { stubs: {
+        AppLayout: AppLayoutStub, UsageStatsCards: true, UsageFilters: UsageFiltersStub,
+        UsageTable: UsageTableStub, UsageExportProgress: true, UsageCleanupDialog: true,
+        UserBalanceHistoryModal: true, AuditLogModal: true, Pagination: true, Select: true,
+        DateRangePicker: true, Icon: true, TokenUsageTrend: true,
+        ModelDistributionChart: true, GroupDistributionChart: true,
+        EndpointDistributionChart: true, UserTokenRanking: true,
+      } },
+    })
+    vi.advanceTimersByTime(120)
+    await flushPromises()
+
+    const columns = wrapper.findAll('[data-test="usage-column"]').map(node => node.text())
+    expect(columns).toContain('reasoning_effort')
+    expect(columns).not.toContain('user_agent')
+    expect(localStorage.setItem).toHaveBeenCalledWith(
+      'usage-hidden-columns',
+      JSON.stringify(['user_agent'])
+    )
+    expect(localStorage.setItem).toHaveBeenCalledWith(
+      'usage-hidden-columns-version',
+      'reasoning-effort-visible-by-default'
+    )
   })
 
   it('keeps previous model stats visible during refresh until new data arrives', async () => {
