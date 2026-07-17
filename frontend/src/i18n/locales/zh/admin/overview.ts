@@ -813,6 +813,7 @@ export default {
       accountsAvailable: '可用:',
       accountsRateLimited: '限流:',
       accountsTotal: '总量:',
+      viewAccounts: '查看该分组的账号',
       accountsUnit: '个账号',
       form: {
         name: '名称',

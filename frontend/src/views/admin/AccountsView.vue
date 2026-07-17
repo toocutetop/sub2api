@@ -7,7 +7,7 @@
             v-model:searchQuery="params.search"
             :filters="params"
             :groups="groups"
-            @update:filters="(newFilters) => Object.assign(params, newFilters)"
+            @update:filters="handleFilterUpdate"
             @change="debouncedReload"
             @update:searchQuery="debouncedReload"
           />
@@ -470,8 +470,8 @@
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
 import { useTableLoader } from '@/composables/useTableLoader'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
@@ -515,7 +515,14 @@ import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType,
 
 const { t } = useI18n()
 const appStore = useAppStore()
-const authStore = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+
+const normalizeAccountGroupFilter = (value: unknown): string => {
+  const candidate = Array.isArray(value) ? value[0] : value
+  if (candidate === 'ungrouped') return candidate
+  return typeof candidate === 'string' && /^[1-9]\d*$/.test(candidate) ? candidate : ''
+}
 
 const proxies = ref<AccountProxy[]>([])
 const groups = ref<AdminGroup[]>([])
@@ -904,7 +911,7 @@ const {
     type: '',
     status: '',
     privacy_mode: '',
-    group: '',
+    group: normalizeAccountGroupFilter(route.query.group),
     search: '',
     include_scheduler_score: shouldIncludeSchedulerScore() ? '1' : '0',
     sort_by: sortState.sort_by,
@@ -1003,6 +1010,30 @@ const debouncedReload = () => {
   pendingTodayStatsRefresh.value = true
   baseDebouncedReload()
 }
+
+const handleFilterUpdate = (newFilters: Record<string, unknown>) => {
+  Object.assign(params, newFilters)
+  if (!Object.prototype.hasOwnProperty.call(newFilters, 'group')) return
+
+  const group = normalizeAccountGroupFilter(newFilters.group)
+  const currentGroup = normalizeAccountGroupFilter(route.query.group)
+  if (group === currentGroup) return
+
+  const query = { ...route.query }
+  if (group) query.group = group
+  else delete query.group
+  void router.replace({ query })
+}
+
+watch(
+  () => route.query.group,
+  (value) => {
+    const group = normalizeAccountGroupFilter(value)
+    if (params.group === group) return
+    params.group = group
+    debouncedReload()
+  }
+)
 
 const handlePageChange = (page: number) => {
   syncAccountListDerivedParams()
@@ -1404,9 +1435,7 @@ const allColumns = computed(() => {
     { key: 'schedulable', label: t('admin.accounts.columns.schedulable'), sortable: true },
     { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false }
   ]
-  if (!authStore.isSimpleMode) {
-    c.push({ key: 'groups', label: t('admin.accounts.columns.groups'), sortable: false })
-  }
+  c.push({ key: 'groups', label: t('admin.accounts.columns.groups'), sortable: false })
   c.push(
     { key: 'usage', label: t('admin.accounts.columns.usageWindows'), sortable: false },
     { key: 'proxy', label: t('admin.accounts.columns.proxy'), sortable: false },

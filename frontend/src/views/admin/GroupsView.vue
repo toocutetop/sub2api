@@ -264,7 +264,12 @@
           </template>
 
           <template #cell-account_count="{ row }">
-            <div class="space-y-0.5 text-xs">
+            <button
+              type="button"
+              class="space-y-0.5 rounded px-1 py-0.5 text-left text-xs transition-colors hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-500/40 dark:hover:bg-primary-900/20"
+              :title="t('admin.groups.viewAccounts')"
+              @click="viewGroupAccounts(row.id)"
+            >
               <div>
                 <span class="text-gray-500 dark:text-gray-400">{{
                   t("admin.groups.accountsAvailable")
@@ -304,7 +309,7 @@
                   >{{ t("admin.groups.accountsUnit") }}</span
                 >
               </div>
-            </div>
+            </button>
           </template>
 
           <template #cell-capacity="{ row }">
@@ -3599,6 +3604,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { useAppStore } from "@/stores/app";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
@@ -3658,6 +3664,11 @@ import {
 } from "./groupsImagePricing";
 
 const { t } = useI18n();
+const router = useRouter();
+
+const viewGroupAccounts = (groupID: number) => {
+  void router.push({ path: "/admin/accounts", query: { group: String(groupID) } });
+};
 const appStore = useAppStore();
 const onboardingStore = useOnboardingStore();
 

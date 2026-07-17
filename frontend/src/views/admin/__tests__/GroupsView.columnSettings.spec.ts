@@ -15,6 +15,7 @@ const {
   showSuccess,
   isCurrentStep,
   nextStep,
+  routerPush,
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   getAllGroups: vi.fn(),
@@ -26,6 +27,11 @@ const {
   showSuccess: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
+  routerPush: vi.fn(),
+}))
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPush }),
 }))
 
 const messages: Record<string, string> = {
@@ -41,6 +47,7 @@ const messages: Record<string, string> = {
   'admin.groups.columns.usage': 'Usage',
   'admin.groups.columns.status': 'Status',
   'admin.groups.columns.actions': 'Actions',
+  'admin.groups.viewAccounts': 'View accounts in this group',
 }
 
 vi.mock('@/api/admin', () => ({
@@ -148,6 +155,9 @@ const DataTableStub = {
     <div>
       <div data-test="columns">{{ columns.map((col) => col.key).join(',') }}</div>
       <div data-test="rows">{{ data.map((row) => row.name).join(',') }}</div>
+      <div v-for="row in data" :key="row.id">
+        <slot name="cell-account_count" :row="row" :value="row.account_count" />
+      </div>
     </div>
   `,
 }
@@ -232,6 +242,7 @@ describe('admin GroupsView column settings', () => {
     showSuccess.mockReset()
     isCurrentStep.mockReset()
     nextStep.mockReset()
+    routerPush.mockReset()
 
     listGroups.mockResolvedValue({
       items: [createGroup()],
@@ -246,6 +257,17 @@ describe('admin GroupsView column settings', () => {
     getCapacitySummary.mockResolvedValue([])
     listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     isCurrentStep.mockReturnValue(false)
+  })
+
+  it('opens the account list filtered to the selected group', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.get('button[title="View accounts in this group"]').trigger('click')
+
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/admin/accounts',
+      query: { group: '1' },
+    })
   })
 
   afterEach(() => {
